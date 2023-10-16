@@ -4,8 +4,7 @@ use eframe::egui;
 
 use egui_file::FileDialog;
 
-use std::fs;
-use std::path::Path;
+use medit::cat;
 
 fn main() -> Result<(), eframe::Error> {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
@@ -25,25 +24,23 @@ fn main() -> Result<(), eframe::Error> {
     )
 }
 
+#[derive(Debug)]
+enum EditMode {
+    Insert,
+    Normal,
+}
+
 struct Tabs {
     name: String,
     text: String,
+    mode: EditMode,
 }
 
+#[derive(Default)]
 struct MyApp {
     open_file_dialog: Option<FileDialog>,
     selected_tab: usize,
     tabs: Vec<Tabs>,
-}
-
-impl Default for MyApp {
-    fn default() -> Self {
-        Self {
-            open_file_dialog: None,
-            selected_tab: 0,
-            tabs: Vec::new(),
-        }
-    }
 }
 
 impl eframe::App for MyApp {
@@ -67,6 +64,7 @@ impl eframe::App for MyApp {
                                 self.tabs.push(Tabs {
                                     name: file_name,
                                     text,
+                                    mode: EditMode::Normal,
                                 });
                             }
                         }
@@ -83,10 +81,17 @@ impl eframe::App for MyApp {
             ui.group(|ui| {
                 ui.vertical_centered_justified(|ui| {
                     if !self.tabs.is_empty() {
+                        // TODO: editor modes
+                        if ui.input(|key| key.key_pressed(egui::Key::I)) {
+                            self.tabs[self.selected_tab].mode = EditMode::Insert;
+                        }
+
                         egui::ScrollArea::both().show(ui, |ui| {
-                            ui.add(egui::TextEdit::multiline(
-                                &mut self.tabs[self.selected_tab].text,
-                            ));
+                            ui.add_sized(
+                                ui.available_size(),
+                                egui::TextEdit::multiline(&mut self.tabs[self.selected_tab].text)
+                                    .code_editor(),
+                            );
                         });
                     }
                 })
@@ -95,12 +100,4 @@ impl eframe::App for MyApp {
             ui.allocate_space(ui.available_size());
         });
     }
-}
-
-#[inline]
-pub fn cat(path: &Path) -> Result<String, std::io::Error> {
-    let file_bytes: Vec<u8> = fs::read(path)?;
-    let buffer: String = String::from_utf8(file_bytes).unwrap_or(String::new());
-
-    Ok(buffer)
 }
