@@ -19,31 +19,32 @@ fn main() -> Result<(), eframe::Error> {
             // This gives us image support:
             egui_extras::install_image_loaders(&cc.egui_ctx);
 
-            Box::<MyApp>::default()
+            Box::<Medit>::default()
         }),
     )
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq)]
 enum EditMode {
     Insert,
     Normal,
 }
 
-struct Tabs {
+#[derive(Clone, PartialEq)]
+struct Tab {
     name: String,
     text: String,
     mode: EditMode,
 }
 
 #[derive(Default)]
-struct MyApp {
+struct Medit {
     open_file_dialog: Option<FileDialog>,
     selected_tab: usize,
-    tabs: Vec<Tabs>,
+    tabs: Vec<Tab>,
 }
 
-impl eframe::App for MyApp {
+impl eframe::App for Medit {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.add_space(16.0);
@@ -61,7 +62,7 @@ impl eframe::App for MyApp {
                                 let text: String = cat(file).unwrap();
                                 let file_name: String =
                                     file.file_name().unwrap().to_string_lossy().to_string();
-                                self.tabs.push(Tabs {
+                                self.tabs.push(Tab {
                                     name: file_name,
                                     text,
                                     mode: EditMode::Normal,
@@ -70,10 +71,17 @@ impl eframe::App for MyApp {
                         }
                     }
 
-                    for (tab_id, tab) in self.tabs.iter().enumerate() {
-                        if ui.add(egui::Button::new(&tab.name)).clicked() {
-                            self.selected_tab = tab_id;
-                        }
+                    // Handle tabs
+                    for (tab_id, mut tab) in self.tabs.clone().iter().enumerate() {
+                        ui.group(|ui| {
+                            let button = ui.button(&tab.name);
+                            let close_button = ui.button("X");
+                            if button.clicked() {
+                                self.selected_tab = tab_id;
+                            } else if button.secondary_clicked() || close_button.clicked() {
+                                close_tab(&mut tab, self);
+                            }
+                        });
                     }
                 })
             });
@@ -100,4 +108,13 @@ impl eframe::App for MyApp {
             ui.allocate_space(ui.available_size());
         });
     }
+}
+
+fn close_tab(tab: &Tab, info: &mut Medit) {
+    if info.tabs.len() > 1 && info.selected_tab != 0 {
+        info.selected_tab -= 1;
+    } else {
+        info.selected_tab = 0;
+    }
+    info.tabs.retain(|x| x != tab)
 }
