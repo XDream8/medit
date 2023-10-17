@@ -2,6 +2,7 @@
 
 use eframe::egui;
 
+use egui_code_editor::{CodeEditor, ColorTheme, Syntax};
 use egui_file::FileDialog;
 
 use medit::cat;
@@ -35,6 +36,7 @@ struct Tab {
     name: String,
     text: String,
     mode: EditMode,
+    markdown_view: bool,
 }
 
 #[derive(Default)]
@@ -47,10 +49,14 @@ struct Medit {
 impl eframe::App for Medit {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.add_space(16.0);
+            ui.add_space(24.0);
 
             egui::TopBottomPanel::top("tabs").show(ctx, |ui| {
                 ui.horizontal(|ui| {
+                    if ui.button("Markdown View").clicked() && !self.tabs.is_empty() {
+                        self.tabs[self.selected_tab].markdown_view =
+                            !self.tabs[self.selected_tab].markdown_view;
+                    }
                     if ui.button("Open file…").clicked() {
                         let mut dialog = FileDialog::open_file(None);
                         dialog.open();
@@ -62,11 +68,14 @@ impl eframe::App for Medit {
                                 let text: String = cat(file).unwrap();
                                 let file_name: String =
                                     file.file_name().unwrap().to_string_lossy().to_string();
-                                self.tabs.push(Tab {
+                                let tab: Tab = Tab {
                                     name: file_name,
                                     text,
                                     mode: EditMode::Normal,
-                                });
+                                    markdown_view: false,
+                                };
+                                // open tab
+                                new_tab(tab, self);
                             }
                         }
                     }
@@ -76,6 +85,7 @@ impl eframe::App for Medit {
                         ui.group(|ui| {
                             let button = ui.button(&tab.name);
                             let close_button = ui.button("X");
+                            // close tab
                             if button.clicked() {
                                 self.selected_tab = tab_id;
                             } else if button.secondary_clicked() || close_button.clicked() {
@@ -86,28 +96,44 @@ impl eframe::App for Medit {
                 })
             });
 
+            // text edit
             ui.group(|ui| {
                 ui.vertical_centered_justified(|ui| {
                     if !self.tabs.is_empty() {
+                        let tab = &mut self.tabs[self.selected_tab];
                         // TODO: editor modes
                         if ui.input(|key| key.key_pressed(egui::Key::I)) {
-                            self.tabs[self.selected_tab].mode = EditMode::Insert;
+                            tab.mode = EditMode::Insert;
                         }
 
-                        egui::ScrollArea::both().show(ui, |ui| {
-                            ui.add_sized(
-                                ui.available_size(),
-                                egui::TextEdit::multiline(&mut self.tabs[self.selected_tab].text)
-                                    .code_editor(),
-                            );
-                        });
-                    }
+                        CodeEditor::default()
+                            .id_source("code editor")
+                            .with_rows(12)
+                            .with_fontsize(14.0)
+                            .with_theme(ColorTheme::GRUVBOX)
+                            .with_syntax(Syntax::rust())
+                            .with_numlines(true)
+                            .show(ui, &mut tab.text);
+
+                        if tab.markdown_view {
+                            // Convert Markdown to HTML
+                            let parser =
+                                pulldown_cmark::Parser::new(&self.tabs[self.selected_tab].text);
+                            let mut html = String::new();
+                            pulldown_cmark::html::push_html(&mut html, parser);
+                            ui.add(egui::Label::new(&html));
+                        }
+                    };
                 })
             });
 
             ui.allocate_space(ui.available_size());
         });
     }
+}
+
+fn new_tab(tab: Tab, info: &mut Medit) {
+    info.tabs.push(tab);
 }
 
 fn close_tab(tab: &Tab, info: &mut Medit) {
